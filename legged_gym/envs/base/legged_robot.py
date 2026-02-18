@@ -1,6 +1,5 @@
-from legged_gym import LEGGED_GYM_ROOT_DIR, envs
+from legged_gym import LEGGED_GYM_ROOT_DIR
 import time
-from warnings import WarningMessage
 import numpy as np
 import os
 
@@ -8,10 +7,8 @@ from isaacgym.torch_utils import *
 from isaacgym import gymtorch, gymapi, gymutil
 
 import torch
-from torch import Tensor
 from typing import Tuple, Dict
 
-from legged_gym import LEGGED_GYM_ROOT_DIR
 from legged_gym.envs.base.base_task import BaseTask
 from legged_gym.utils.math import wrap_to_pi
 from legged_gym.utils.isaacgym_utils import get_euler_xyz as get_euler_xyz_in_tensor
@@ -380,8 +377,12 @@ class LeggedRobot(BaseTask):
         if len(push_env_ids) == 0:
             return
         max_vel = self.cfg.domain_rand.max_push_vel_xy
-        self.root_states[:, 7:9] = torch_rand_float(-max_vel, max_vel, (self.num_envs, 2), device=self.device) # lin vel x/y
-        
+        # Only write into the rows that will actually be committed to the simulator.
+        # The previous code wrote to self.root_states[:] (all envs), which corrupted
+        # the cached velocity of non-pushed environments and caused incorrect
+        # base_lin_vel / base_ang_vel observations on the next physics step.
+        self.root_states[push_env_ids, 7:9] = torch_rand_float(-max_vel, max_vel, (len(push_env_ids), 2), device=self.device) # lin vel x/y
+
         env_ids_int32 = push_env_ids.to(dtype=torch.int32)
         self.gym.set_actor_root_state_tensor_indexed(self.sim,
                                                     gymtorch.unwrap_tensor(self.root_states),
